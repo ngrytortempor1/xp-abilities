@@ -9,5 +9,21 @@
   "ability.xpabilities.vitality": "生命力",
   "ability.xpabilities.night_vision": "夜目",
   "ability.xpabilities.satiation": "満腹",
-  "ability.xpabilities.lucky_hand": "幸運の手"
+  "ability.xpabilities.lucky_hand": "幸運の手",
+  "ability.xpabilities.berserk": "バーサーク",
+  "ability.xpabilities.phalanx": "ファランクス",
+  "ability.xpabilities.lifesteal": "吸血",
+  "ability.xpabilities.critical_edge": "クリティカルエッジ",
+  "ability.xpabilities.thorns": "棘の鎧",
+  "ability.xpabilities.regen": "リジェネ",
+  "ability.xpabilities.magic_shield": "マジックシールド",
+  "ability.xpabilities.fire_resist": "ファイアレジスト",
+  "ability.xpabilities.water_breathing": "水中呼吸",
+  "ability.xpabilities.xp_boost": "自動経験値",
+  "ability.xpabilities.toughness": "タフネス",
+  "ability.xpabilities.feather_fall": "落下耐性",
+  "ability.xpabilities.magnet": "磁石",
+  "ability.xpabilities.stealth": "ステルス",
+  "ability.xpabilities.double_jump": "二段ジャンプ",
+  "ability.xpabilities.auto_smelt": "オートスメルト"
 }
