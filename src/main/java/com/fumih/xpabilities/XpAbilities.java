@@ -1,6 +1,7 @@
 package com.fumih.xpabilities;
 
 import com.fumih.xpabilities.ability.PlayerAbilityData;
+import com.fumih.xpabilities.network.DoubleJumpPacket;
 import com.fumih.xpabilities.network.LearnAbilityPacket;
 import com.fumih.xpabilities.network.SyncAbilityPacket;
 import com.fumih.xpabilities.network.ToggleAbilityPacket;
@@ -59,6 +60,13 @@ public class XpAbilities {
                 LearnAbilityPacket.TYPE,
                 LearnAbilityPacket.STREAM_CODEC,
                 LearnAbilityPacket::handle
+        );
+
+        // クライアント→サーバー: 二段ジャンプリクエスト
+        registrar.playToServer(
+                DoubleJumpPacket.TYPE,
+                DoubleJumpPacket.STREAM_CODEC,
+                DoubleJumpPacket::handle
         );
 
         // クライアント→サーバー: アビリティオン/オフ切替

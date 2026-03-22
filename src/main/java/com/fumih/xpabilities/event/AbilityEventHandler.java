@@ -5,16 +5,21 @@ import com.fumih.xpabilities.ability.Ability;
 import com.fumih.xpabilities.ability.PlayerAbilityData;
 import com.fumih.xpabilities.network.SyncAbilityPacket;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.AABB;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+
+import java.util.List;
 
 /**
  * アビリティ効果を適用するイベントハンドラ
@@ -30,25 +35,57 @@ public class AbilityEventHandler {
             XpAbilities.id("leap_jump_boost");
     private static final net.minecraft.resources.ResourceLocation SWIFT_MODIFIER =
             XpAbilities.id("swift_speed_boost");
+    // 戦闘系Modifier
+    private static final net.minecraft.resources.ResourceLocation BERSERK_MODIFIER =
+            XpAbilities.id("berserk_attack_boost");
+    private static final net.minecraft.resources.ResourceLocation PHALANX_MODIFIER =
+            XpAbilities.id("phalanx_kb_resistance");
+    // サバイバル系Modifier
+    private static final net.minecraft.resources.ResourceLocation TOUGHNESS_MODIFIER =
+            XpAbilities.id("toughness_armor_boost");
+
+    // リジェネの回復間隔（60tick = 3秒）
+    private static final int REGEN_INTERVAL = 60;
+    // 磁石の引き寄せ範囲
+    private static final double MAGNET_RANGE = 3.0;
 
     /**
-     * ダメージ軽減（鉄壁）
+     * ダメージ軽減（鉄壁・落下耐性・マジックシールド）
      */
     @SubscribeEvent
-    public static void onLivingDamage(LivingDamageEvent.Pre event) {
-        if (event.getEntity() instanceof Player player) {
-            PlayerAbilityData data = player.getData(XpAbilities.PLAYER_ABILITY_DATA);
-            if (data.isEnabled(Ability.IRON_WALL)) {
-                // ダメージを10%カット
-                float newDamage = event.getNewDamage() * 0.9f;
-                event.setNewDamage(newDamage);
+    public static void onLivingDamagePre(LivingDamageEvent.Pre event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        PlayerAbilityData data = player.getData(XpAbilities.PLAYER_ABILITY_DATA);
+
+        // --- 鉄壁（ダメージ10%カット）---
+        if (data.isEnabled(Ability.IRON_WALL)) {
+            event.setNewDamage(event.getNewDamage() * 0.9f);
+        }
+
+        // --- 落下耐性（落下ダメージ無効）---
+        if (data.isEnabled(Ability.FEATHER_FALL)) {
+            if (event.getSource().is(DamageTypes.FALL)) {
+                event.setNewDamage(0f);
+            }
+        }
+
+        // --- マジックシールド（火炎・毒・ウィザー等のダメージ50%軽減）---
+        if (data.isEnabled(Ability.MAGIC_SHIELD)) {
+            var source = event.getSource();
+            if (source.is(DamageTypes.ON_FIRE)
+                    || source.is(DamageTypes.IN_FIRE)
+                    || source.is(DamageTypes.LAVA)
+                    || source.is(DamageTypes.LIGHTNING_BOLT)
+                    || source.is(DamageTypes.MAGIC)
+                    || source.is(DamageTypes.WITHER)) {
+                event.setNewDamage(event.getNewDamage() * 0.5f);
             }
         }
     }
 
     /**
      * プレイヤーティック処理
-     * 移動速度、暗視、満腹度、Attribute Modifierの管理
+     * 移動速度、暗視、満腹度、Attribute Modifierの管理、リジェネ、磁石、ステルスなど
      */
     @SubscribeEvent
     public static void onPlayerTick(PlayerTickEvent.Post event) {
@@ -56,6 +93,8 @@ public class AbilityEventHandler {
         if (player.level().isClientSide()) return;
 
         PlayerAbilityData data = player.getData(XpAbilities.PLAYER_ABILITY_DATA);
+
+        // ===== 基本系 =====
 
         // --- 俊足（移動速度UP）---
         updateAttributeModifier(player, Attributes.MOVEMENT_SPEED, SWIFT_MODIFIER,
@@ -78,11 +117,84 @@ public class AbilityEventHandler {
         }
 
         // --- 満腹（空腹軽減）---
-        // SATURATIONエフェクトを使用して満腹度の消費を軽減
         if (data.isEnabled(Ability.SATIATION)) {
             if (!player.hasEffect(MobEffects.SATURATION) ||
                     player.getEffect(MobEffects.SATURATION).getDuration() < 100) {
                 player.addEffect(new MobEffectInstance(MobEffects.SATURATION, 200, 0, false, false));
+            }
+        }
+
+        // ===== 戦闘系 =====
+
+        // --- バーサーク（攻撃力30%UP）---
+        updateAttributeModifier(player, Attributes.ATTACK_DAMAGE, BERSERK_MODIFIER,
+                data.isEnabled(Ability.BERSERK), 0.3, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL);
+
+        // --- ファランクス（ノックバック耐性+50%）---
+        updateAttributeModifier(player, Attributes.KNOCKBACK_RESISTANCE, PHALANX_MODIFIER,
+                data.isEnabled(Ability.PHALANX), 0.5, AttributeModifier.Operation.ADD_VALUE);
+
+        // ===== 魔法系 =====
+
+        // --- リジェネ（3秒毎にHP回復）---
+        if (data.isEnabled(Ability.REGEN)) {
+            if (player.tickCount % REGEN_INTERVAL == 0) {
+                // 1.0f = ハート0.5個分
+                player.heal(1.0f);
+            }
+        }
+
+        // --- ファイアレジスト（常時耐火）---
+        if (data.isEnabled(Ability.FIRE_RESIST)) {
+            if (!player.hasEffect(MobEffects.FIRE_RESISTANCE) ||
+                    player.getEffect(MobEffects.FIRE_RESISTANCE).getDuration() < 300) {
+                player.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 400, 0, false, false));
+            }
+        }
+
+        // --- 水中呼吸（常時水中呼吸）---
+        if (data.isEnabled(Ability.WATER_BREATHING)) {
+            if (!player.hasEffect(MobEffects.WATER_BREATHING) ||
+                    player.getEffect(MobEffects.WATER_BREATHING).getDuration() < 300) {
+                player.addEffect(new MobEffectInstance(MobEffects.WATER_BREATHING, 400, 0, false, false));
+            }
+        }
+
+        // ===== サバイバル系 =====
+
+        // --- タフネス（防御力+4）---
+        updateAttributeModifier(player, Attributes.ARMOR, TOUGHNESS_MODIFIER,
+                data.isEnabled(Ability.TOUGHNESS), 4.0, AttributeModifier.Operation.ADD_VALUE);
+
+        // --- 磁石（アイテム回収範囲2倍）--- 周囲のItemEntityをプレイヤーに引き寄せる
+        if (data.isEnabled(Ability.MAGNET)) {
+            AABB area = player.getBoundingBox().inflate(MAGNET_RANGE);
+            List<ItemEntity> items = player.level().getEntitiesOfClass(ItemEntity.class, area);
+            for (ItemEntity item : items) {
+                if (!item.hasPickUpDelay()) {
+                    double dx = player.getX() - item.getX();
+                    double dy = player.getY() - item.getY();
+                    double dz = player.getZ() - item.getZ();
+                    double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                    if (dist > 0.5) {
+                        double speed = 0.15;
+                        item.setDeltaMovement(
+                                item.getDeltaMovement().x + dx / dist * speed,
+                                item.getDeltaMovement().y + dy / dist * speed,
+                                item.getDeltaMovement().z + dz / dist * speed
+                        );
+                    }
+                }
+            }
+        }
+
+        // --- ステルス（スニーク時に透明化）---
+        if (data.isEnabled(Ability.STEALTH)) {
+            if (player.isCrouching()) {
+                if (!player.hasEffect(MobEffects.INVISIBILITY) ||
+                        player.getEffect(MobEffects.INVISIBILITY).getDuration() < 60) {
+                    player.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, 100, 0, false, false));
+                }
             }
         }
     }
@@ -168,14 +280,19 @@ public class AbilityEventHandler {
      * 全アビリティModifierを削除
      */
     private static void removeAllAbilityModifiers(Player player) {
-        var speedAttr = player.getAttribute(Attributes.MOVEMENT_SPEED);
-        if (speedAttr != null) speedAttr.removeModifier(SWIFT_MODIFIER);
+        removeModifier(player, Attributes.MOVEMENT_SPEED, SWIFT_MODIFIER);
+        removeModifier(player, Attributes.MAX_HEALTH, VITALITY_MODIFIER);
+        removeModifier(player, Attributes.JUMP_STRENGTH, LEAP_MODIFIER);
+        removeModifier(player, Attributes.ATTACK_DAMAGE, BERSERK_MODIFIER);
+        removeModifier(player, Attributes.KNOCKBACK_RESISTANCE, PHALANX_MODIFIER);
+        removeModifier(player, Attributes.ARMOR, TOUGHNESS_MODIFIER);
+    }
 
-        var healthAttr = player.getAttribute(Attributes.MAX_HEALTH);
-        if (healthAttr != null) healthAttr.removeModifier(VITALITY_MODIFIER);
-
-        var jumpAttr = player.getAttribute(Attributes.JUMP_STRENGTH);
-        if (jumpAttr != null) jumpAttr.removeModifier(LEAP_MODIFIER);
+    private static void removeModifier(Player player,
+            net.minecraft.core.Holder<net.minecraft.world.entity.ai.attributes.Attribute> attr,
+            net.minecraft.resources.ResourceLocation id) {
+        var instance = player.getAttribute(attr);
+        if (instance != null) instance.removeModifier(id);
     }
 
     /**
@@ -188,5 +305,11 @@ public class AbilityEventHandler {
                 data.isEnabled(Ability.VITALITY), 4.0, AttributeModifier.Operation.ADD_VALUE);
         updateAttributeModifier(player, Attributes.JUMP_STRENGTH, LEAP_MODIFIER,
                 data.isEnabled(Ability.LEAP), 0.3, AttributeModifier.Operation.ADD_VALUE);
+        updateAttributeModifier(player, Attributes.ATTACK_DAMAGE, BERSERK_MODIFIER,
+                data.isEnabled(Ability.BERSERK), 0.3, AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL);
+        updateAttributeModifier(player, Attributes.KNOCKBACK_RESISTANCE, PHALANX_MODIFIER,
+                data.isEnabled(Ability.PHALANX), 0.5, AttributeModifier.Operation.ADD_VALUE);
+        updateAttributeModifier(player, Attributes.ARMOR, TOUGHNESS_MODIFIER,
+                data.isEnabled(Ability.TOUGHNESS), 4.0, AttributeModifier.Operation.ADD_VALUE);
     }
 }

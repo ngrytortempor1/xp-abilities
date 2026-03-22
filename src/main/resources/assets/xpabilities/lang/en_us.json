@@ -9,5 +9,21 @@
   "ability.xpabilities.vitality": "Vitality",
   "ability.xpabilities.night_vision": "Night Vision",
   "ability.xpabilities.satiation": "Satiation",
-  "ability.xpabilities.lucky_hand": "Lucky Hand"
+  "ability.xpabilities.lucky_hand": "Lucky Hand",
+  "ability.xpabilities.berserk": "Berserk",
+  "ability.xpabilities.phalanx": "Phalanx",
+  "ability.xpabilities.lifesteal": "Lifesteal",
+  "ability.xpabilities.critical_edge": "Critical Edge",
+  "ability.xpabilities.thorns": "Thorns Armor",
+  "ability.xpabilities.regen": "Regeneration",
+  "ability.xpabilities.magic_shield": "Magic Shield",
+  "ability.xpabilities.fire_resist": "Fire Resistance",
+  "ability.xpabilities.water_breathing": "Water Breathing",
+  "ability.xpabilities.xp_boost": "XP Boost",
+  "ability.xpabilities.toughness": "Toughness",
+  "ability.xpabilities.feather_fall": "Feather Fall",
+  "ability.xpabilities.magnet": "Magnet",
+  "ability.xpabilities.stealth": "Stealth",
+  "ability.xpabilities.double_jump": "Double Jump",
+  "ability.xpabilities.auto_smelt": "Auto Smelt"
 }
